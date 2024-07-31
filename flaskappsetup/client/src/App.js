@@ -36,8 +36,45 @@ function App() {
   return (
     <div className="App">
       <header className="App-header">
-        <h1>Data from DefiLlama</h1>
-        <pre>{JSON.stringify(data, null, 2)}</pre>
+      <h1>Data from DefiLlama</h1>
+        {data.length > 0 ? (
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Amount</th>
+                <th>Category</th>
+                <th>Chains</th>
+                <th>Date</th>
+                <th>Lead Investors</th>
+                <th>Other Investors</th>
+                <th>Round</th>
+                <th>Sector</th>
+                <th>Source</th>
+                <th>Valuation</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((item, index) => (
+                <tr key={index}>
+                  <td>{item.name}</td>
+                  <td>{item.amount}</td>
+                  <td>{item.category}</td>
+                  <td>{item.chains ? item.chains.join(', ') : ''}</td>
+                  <td>{item.date}</td>
+                  <td>{item.leadInvestors ? item.leadInvestors.join(', ') : ''}</td>
+                  <td>{item.otherInvestors ? item.otherInvestors.join(', ') : ''}</td>
+                  <td>{item.round}</td>
+                  <td>{item.sector}</td>
+                  <td>{item.source}</td>
+                  <td>{item.valuation}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div>No data available</div>
+        )}
       </header>
     </div>
   );
