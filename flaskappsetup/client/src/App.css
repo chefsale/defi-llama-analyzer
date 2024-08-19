@@ -1,39 +1,41 @@
-.App {
-  text-align: center;
+.table-responsive {
+  max-height: 70vh;
+  overflow-y: auto;
 }
 
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
+.table th {
+  position: sticky;
+  top: 0;
+  background-color: #343a40;
   color: white;
 }
 
-table {
-  width: 80%;
-  margin: 20px auto;
-  border-collapse: collapse;
+.table td, .table th {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
 }
 
-th, td {
-  border: 1px solid #ddd;
-  padding: 8px;
-  text-align: left;
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
 }
 
-th {
-  background-color: #f4f4f4;
+.filters input {
+  flex: 1;
+  min-width: 200px;
 }
 
-tr:nth-child(even) {
-  background-color: #f9f9f9;
-}
-
-tr:hover {
-  background-color: #f1f1f1;
+@media (max-width: 768px) {
+  .table-responsive {
+    max-height: none;
+  }
+  
+  .table td, .table th {
+    max-width: none;
+  }
 }
 
