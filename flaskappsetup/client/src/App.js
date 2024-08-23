@@ -1,5 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import 'bootstrap/dist/css/bootstrap.min.css';
+import { Bar } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+} from 'chart.js';
 import './App.css';
 
 function App() {
@@ -54,6 +64,51 @@ function App() {
       ((item.sector && item.sector.toLowerCase().includes(filters.sector.toLowerCase())) || filters.sector === '')
     );
   }) : [];
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(Number(dateString) * 1000);
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  const generateChartData = () => {
+    const monthlyData = {};
+
+    filteredData.forEach((item) => {
+      const date = new Date(Number(item.date) * 1000);
+      const monthYear = `${date.toLocaleString('default', { month: 'short' })} ${date.getFullYear()}`;
+
+      if (!monthlyData[monthYear]) {
+        monthlyData[monthYear] = 0;
+      }
+
+      monthlyData[monthYear] += parseFloat(item.amount);
+    });
+
+    return {
+      labels: Object.keys(monthlyData),
+      datasets: [
+        {
+          label: 'Amount Raised',
+          data: Object.values(monthlyData),
+          backgroundColor: 'rgba(75, 192, 192, 0.6)',
+        },
+      ],
+    };
+  };
+
+  ChartJS.register(
+    CategoryScale,
+    LinearScale,
+    BarElement,
+    Title,
+    Tooltip,
+    Legend
+  );
 
   if (loading) {
     return <div className="container mt-5"><div className="alert alert-info">Loading...</div></div>;
@@ -126,7 +181,7 @@ function App() {
                     <td>{item.amount || 'N/A'}</td>
                     <td>{item.category || 'N/A'}</td>
                     <td>{item.chains ? item.chains.join(', ') : 'N/A'}</td>
-                    <td>{item.date || 'N/A'}</td>
+                    <td>{formatDate(item.date)}</td>
                     <td>{item.leadInvestors ? item.leadInvestors.join(', ') : 'N/A'}</td>
                     <td>{item.otherInvestors ? item.otherInvestors.join(', ') : 'N/A'}</td>
                     <td>{item.round || 'N/A'}</td>
@@ -140,6 +195,17 @@ function App() {
           ) : (
             <div className="alert alert-info">No data available</div>
           )}
+        </div>
+        <div className="chart-container">
+          <h2>Monthly Fundraising</h2>
+          <Bar options={{
+            responsive: true,
+            plugins: {
+              title: {
+                display: false,
+              },
+            },
+          }} data={generateChartData()} />
         </div>
       </div>
     </div>
