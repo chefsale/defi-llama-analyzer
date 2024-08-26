@@ -12,6 +12,15 @@ import {
 } from 'chart.js';
 import './App.css';
 
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend
+);
+
 function App() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -101,14 +110,41 @@ function App() {
     };
   };
 
-  ChartJS.register(
-    CategoryScale,
-    LinearScale,
-    BarElement,
-    Title,
-    Tooltip,
-    Legend
-  );
+  const generateRoundsChartData = () => {
+    const monthlyRoundData = {};
+
+    filteredData.forEach((item) => {
+      const date = new Date(Number(item.date) * 1000);
+      const monthYear = `${date.toLocaleString('default', { month: 'short' })} ${date.getFullYear()}`;
+      const round = item.round || 'Unknown';
+
+      if (!monthlyRoundData[monthYear]) {
+        monthlyRoundData[monthYear] = {};
+      }
+
+      if (!monthlyRoundData[monthYear][round]) {
+        monthlyRoundData[monthYear][round] = 0;
+      }
+
+      monthlyRoundData[monthYear][round]++;
+    });
+
+    const labels = Object.keys(monthlyRoundData);
+    const datasets = Object.keys(Object.values(monthlyRoundData)[0] || {}).map((round) => ({
+      label: round,
+      data: labels.map((month) => monthlyRoundData[month][round] || 0),
+      backgroundColor: getRandomColor(),
+    }));
+
+    return { labels, datasets };
+  };
+
+  const getRandomColor = () => {
+    const r = Math.floor(Math.random() * 255);
+    const g = Math.floor(Math.random() * 255);
+    const b = Math.floor(Math.random() * 255);
+    return `rgba(${r}, ${g}, ${b}, 0.6)`;
+  };
 
   if (loading) {
     return <div className="container mt-5"><div className="alert alert-info">Loading...</div></div>;
@@ -206,6 +242,31 @@ function App() {
               },
             },
           }} data={generateChartData()} />
+        </div>
+        <div className="chart-container">
+          <h2>Projects Raised by Round</h2>
+          <Bar
+            options={{
+              responsive: true,
+              plugins: {
+                title: {
+                  display: false,
+                },
+                legend: {
+                  position: 'top',
+                },
+              },
+              scales: {
+                x: {
+                  stacked: true,
+                },
+                y: {
+                  stacked: true,
+                },
+              },
+            }}
+            data={generateRoundsChartData()}
+          />
         </div>
       </div>
     </div>

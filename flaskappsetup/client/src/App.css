@@ -29,6 +29,11 @@
   min-width: 200px;
 }
 
+.chart-container {
+  margin-top: 2rem;
+  margin-bottom: 2rem;
+}
+
 @media (max-width: 768px) {
   .table-responsive {
     max-height: none;
