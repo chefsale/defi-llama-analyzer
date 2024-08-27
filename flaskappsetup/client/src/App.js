@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import { Bar } from 'react-chartjs-2';
 import {
@@ -21,15 +21,85 @@ ChartJS.register(
   Legend
 );
 
+const CheckboxFilter = ({ options, selectedOptions, onChange, title, onSelectAll, onClear }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const dropdownRef = useRef(null);
+
+  const filteredOptions = options
+    .filter(option => option != null)
+    .filter(option =>
+      option.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  return (
+    <div className="filter-group" ref={dropdownRef}>
+      <div className="filter-header" onClick={() => setIsOpen(!isOpen)}>
+        <h5>{title}</h5>
+        <span className="dropdown-arrow">{isOpen ? '▲' : '▼'}</span>
+      </div>
+      {isOpen && (
+        <div className="checkbox-container-wrapper">
+          <div className="checkbox-container">
+            <div className="checkbox-actions">
+              <button onClick={onSelectAll}>Select All</button>
+              <input
+                type="text"
+                placeholder="Search..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="search-input"
+              />
+              <button onClick={onClear}>Clear</button>
+            </div>
+            <div className="checkbox-list">
+              {filteredOptions.map((option) => (
+                <div key={option} className="checkbox-item">
+                  <input
+                    type="checkbox"
+                    id={`checkbox-${title}-${option}`}
+                    checked={selectedOptions.includes(option)}
+                    onChange={() => onChange(option)}
+                  />
+                  <label htmlFor={`checkbox-${title}-${option}`}>{option}</label>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 function App() {
-  const [data, setData] = useState([]);
+  const [data, setData] = useState({ raises: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filters, setFilters] = useState({
-    name: '',
-    category: '',
-    round: '',
-    sector: ''
+    name: [],
+    category: [],
+    round: [],
+    sector: []
+  });
+  const [options, setOptions] = useState({
+    name: [],
+    category: [],
+    round: [],
+    sector: []
   });
 
   useEffect(() => {
@@ -49,6 +119,7 @@ function App() {
         }
         setData(data);
         setLoading(false);
+        updateFilterOptions(data.raises);
       })
       .catch(error => {
         console.error('Error fetching data:', error);
@@ -57,22 +128,49 @@ function App() {
       });
   }, []);
 
-  const handleFilterChange = (e) => {
-    const { name, value } = e.target;
+  const updateFilterOptions = (raises) => {
+    const newOptions = {
+      name: [...new Set(raises.map(item => item.name).filter(Boolean))],
+      category: [...new Set(raises.map(item => item.category).filter(Boolean))],
+      round: [...new Set(raises.map(item => item.round).filter(Boolean))],
+      sector: [...new Set(raises.map(item => item.sector).filter(Boolean))]
+    };
+    setOptions(newOptions);
+    // Set all filters to be selected by default
+    setFilters(newOptions);
+  };
+
+  const handleFilterChange = (option, filterType) => {
     setFilters(prevFilters => ({
       ...prevFilters,
-      [name]: value
+      [filterType]: prevFilters[filterType].includes(option)
+        ? prevFilters[filterType].filter(item => item !== option)
+        : [...prevFilters[filterType], option]
     }));
   };
 
-  const filteredData = data.raises ? data.raises.filter(item => {
+  const handleSelectAll = (filterType) => {
+    setFilters(prevFilters => ({
+      ...prevFilters,
+      [filterType]: [...options[filterType]]
+    }));
+  };
+
+  const handleClear = (filterType) => {
+    setFilters(prevFilters => ({
+      ...prevFilters,
+      [filterType]: []
+    }));
+  };
+
+  const filteredData = data.raises.filter(item => {
     return (
-      ((item.name && item.name.toLowerCase().includes(filters.name.toLowerCase())) || filters.name === '') &&
-      ((item.category && item.category.toLowerCase().includes(filters.category.toLowerCase())) || filters.category === '') &&
-      ((item.round && item.round.toLowerCase().includes(filters.round.toLowerCase())) || filters.round === '') &&
-      ((item.sector && item.sector.toLowerCase().includes(filters.sector.toLowerCase())) || filters.sector === '')
+      (filters.name.length === 0 || filters.name.includes(item.name)) &&
+      (filters.category.length === 0 || filters.category.includes(item.category)) &&
+      (filters.round.length === 0 || filters.round.includes(item.round)) &&
+      (filters.sector.length === 0 || filters.sector.includes(item.sector))
     );
-  }) : [];
+  });
 
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
@@ -81,6 +179,16 @@ function App() {
       year: 'numeric',
       month: 'short',
       day: 'numeric'
+    });
+  };
+
+  const sortMonths = (monthYearArray) => {
+    return monthYearArray.sort((a, b) => {
+      const [monthA, yearA] = a.split(' ');
+      const [monthB, yearB] = b.split(' ');
+      const dateA = new Date(`${monthA} 1, ${yearA}`);
+      const dateB = new Date(`${monthB} 1, ${yearB}`);
+      return dateB - dateA; // For descending order
     });
   };
 
@@ -98,12 +206,14 @@ function App() {
       monthlyData[monthYear] += parseFloat(item.amount);
     });
 
+    const sortedMonths = sortMonths(Object.keys(monthlyData));
+
     return {
-      labels: Object.keys(monthlyData),
+      labels: sortedMonths,
       datasets: [
         {
           label: 'Amount Raised',
-          data: Object.values(monthlyData),
+          data: sortedMonths.map(month => monthlyData[month]),
           backgroundColor: 'rgba(75, 192, 192, 0.6)',
         },
       ],
@@ -112,6 +222,7 @@ function App() {
 
   const generateRoundsChartData = () => {
     const monthlyRoundData = {};
+    const roundCounts = {};
 
     filteredData.forEach((item) => {
       const date = new Date(Number(item.date) * 1000);
@@ -127,16 +238,54 @@ function App() {
       }
 
       monthlyRoundData[monthYear][round]++;
+      roundCounts[round] = (roundCounts[round] || 0) + 1;
     });
 
-    const labels = Object.keys(monthlyRoundData);
-    const datasets = Object.keys(Object.values(monthlyRoundData)[0] || {}).map((round) => ({
+    const sortedMonths = sortMonths(Object.keys(monthlyRoundData));
+    const top12Rounds = Object.entries(roundCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 12)
+      .map(([round]) => round);
+
+    const datasets = top12Rounds.map((round) => ({
       label: round,
-      data: labels.map((month) => monthlyRoundData[month][round] || 0),
+      data: sortedMonths.map((month) => monthlyRoundData[month][round] || 0),
       backgroundColor: getRandomColor(),
     }));
 
-    return { labels, datasets };
+    return { labels: sortedMonths, datasets };
+  };
+
+  const generateInvestorChartData = () => {
+    const investorData = {};
+
+    filteredData.forEach((item) => {
+      const investors = [...(item.leadInvestors || []), ...(item.otherInvestors || [])];
+      const amount = parseFloat(item.amount) || 0;
+
+      investors.forEach((investor) => {
+        if (!investorData[investor]) {
+          investorData[investor] = 0;
+        }
+        investorData[investor] += amount / investors.length; // Distribute amount equally among investors
+      });
+    });
+
+    // Sort investors by total investment amount
+    const sortedInvestors = Object.entries(investorData)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 120); // Get top 120 investors
+
+    return {
+      labels: sortedInvestors.map(([investor]) => investor),
+      datasets: [
+        {
+          label: 'Total Investment',
+          data: sortedInvestors.map(([, amount]) => amount),
+          backgroundColor: 'rgba(153, 102, 255, 0.6)',
+        },
+      ],
+    };
   };
 
   const getRandomColor = () => {
@@ -158,38 +307,38 @@ function App() {
     <div className="App">
       <div className="container-fluid py-4">
         <h1 className="mb-4">Data from DefiLlama</h1>
-        <div className="filters">
-          <input
-            type="text"
-            name="name"
-            placeholder="Filter by Name"
-            value={filters.name}
-            onChange={handleFilterChange}
-            className="form-control"
+        <div className="filters-container">
+          <CheckboxFilter
+            options={options.name}
+            selectedOptions={filters.name}
+            onChange={(option) => handleFilterChange(option, 'name')}
+            onSelectAll={() => handleSelectAll('name')}
+            onClear={() => handleClear('name')}
+            title="Filter by Name"
           />
-          <input
-            type="text"
-            name="category"
-            placeholder="Filter by Category"
-            value={filters.category}
-            onChange={handleFilterChange}
-            className="form-control"
+          <CheckboxFilter
+            options={options.category}
+            selectedOptions={filters.category}
+            onChange={(option) => handleFilterChange(option, 'category')}
+            onSelectAll={() => handleSelectAll('category')}
+            onClear={() => handleClear('category')}
+            title="Filter by Category"
           />
-          <input
-            type="text"
-            name="round"
-            placeholder="Filter by Round"
-            value={filters.round}
-            onChange={handleFilterChange}
-            className="form-control"
+          <CheckboxFilter
+            options={options.round}
+            selectedOptions={filters.round}
+            onChange={(option) => handleFilterChange(option, 'round')}
+            onSelectAll={() => handleSelectAll('round')}
+            onClear={() => handleClear('round')}
+            title="Filter by Round"
           />
-          <input
-            type="text"
-            name="sector"
-            placeholder="Filter by Sector"
-            value={filters.sector}
-            onChange={handleFilterChange}
-            className="form-control"
+          <CheckboxFilter
+            options={options.sector}
+            selectedOptions={filters.sector}
+            onChange={(option) => handleFilterChange(option, 'sector')}
+            onSelectAll={() => handleSelectAll('sector')}
+            onClear={() => handleClear('sector')}
+            title="Filter by Sector"
           />
         </div>
         <div className="table-responsive">
@@ -232,41 +381,78 @@ function App() {
             <div className="alert alert-info">No data available</div>
           )}
         </div>
-        <div className="chart-container">
-          <h2>Monthly Fundraising</h2>
-          <Bar options={{
-            responsive: true,
-            plugins: {
-              title: {
-                display: false,
-              },
-            },
-          }} data={generateChartData()} />
-        </div>
-        <div className="chart-container">
-          <h2>Projects Raised by Round</h2>
-          <Bar
-            options={{
-              responsive: true,
-              plugins: {
-                title: {
-                  display: false,
+        <div className="row">
+          <div className="col-md-6">
+            <div className="chart-container">
+              <h2>Monthly Fundraising</h2>
+              <Bar options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  title: {
+                    display: false,
+                  },
                 },
-                legend: {
-                  position: 'top',
-                },
-              },
-              scales: {
-                x: {
-                  stacked: true,
-                },
-                y: {
-                  stacked: true,
-                },
-              },
-            }}
-            data={generateRoundsChartData()}
-          />
+              }} data={generateChartData()} />
+            </div>
+          </div>
+          <div className="col-md-6">
+            <div className="chart-container">
+              <h2>Projects Raised by Round (Top 12)</h2>
+              <Bar
+                options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                    title: {
+                      display: false,
+                    },
+                    legend: {
+                      position: 'top',
+                    },
+                  },
+                  scales: {
+                    x: {
+                      stacked: true,
+                    },
+                    y: {
+                      stacked: true,
+                    },
+                  },
+                }}
+                data={generateRoundsChartData()}
+              />
+            </div>
+          </div>
+          <div className="col-md-6 offset-md-0">
+            <div className="chart-container">
+              <h2>Top 120 Investors by Total Investment</h2>
+              <Bar
+                options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                    title: {
+                      display: false,
+                    },
+                    legend: {
+                      display: false,
+                    },
+                  },
+                  scales: {
+                    y: {
+                      beginAtZero: true,
+                      title: {
+                        display: true,
+                        text: 'Total Investment Amount',
+                      },
+                    },
+                  },
+                }}
+                data={generateInvestorChartData()}
+              />
+            </div>
+          </div>
         </div>
       </div>
     </div>
