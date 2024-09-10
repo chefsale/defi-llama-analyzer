@@ -11,6 +11,9 @@ import {
   Legend,
 } from 'chart.js';
 import './App.css';
+import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import RoundPage from './RoundPage';
+import InvestorPage from './InvestorPage';
 
 ChartJS.register(
   CategoryScale,
@@ -325,6 +328,13 @@ function App() {
     return `rgba(${r}, ${g}, ${b}, 0.6)`;
   };
 
+  const generateSlug = (name) => {
+    return (name || 'unknown')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)+/g, '');
+  };
+
 
 
   if (loading) {
@@ -433,7 +443,10 @@ function App() {
   };
 
   return (
+    <Router>
     <div className="App">
+      <Routes>
+      <Route path="/" element={
       <div className="container-fluid py-4">
         <h1 className="mb-4">Data from DefiLlama</h1>
         <div className="filters-container">
@@ -498,9 +511,43 @@ function App() {
                     <td>{item.category || 'N/A'}</td>
                     <td>{item.chains ? item.chains.join(', ') : 'N/A'}</td>
                     <td>{formatDate(item.date)}</td>
-                    <td>{item.leadInvestors ? item.leadInvestors.join(', ') : 'N/A'}</td>
-                    <td>{item.otherInvestors ? item.otherInvestors.join(', ') : 'N/A'}</td>
-                    <td>{item.round || 'N/A'}</td>
+                    <td>
+                      {item.leadInvestors ? item.leadInvestors.map((investor, i) => (
+                        <React.Fragment key={i}>
+                          <a 
+                            href={`/investor/${generateSlug(investor)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            {investor}
+                          </a>
+                          {i < item.leadInvestors.length - 1 ? ', ' : ''}
+                        </React.Fragment>
+                      )) : 'N/A'}
+                    </td>
+                    <td>
+                      {item.otherInvestors ? item.otherInvestors.map((investor, i) => (
+                        <React.Fragment key={i}>
+                          <a 
+                            href={`/investor/${generateSlug(investor)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            {investor}
+                          </a>
+                          {i < item.otherInvestors.length - 1 ? ', ' : ''}
+                        </React.Fragment>
+                      )) : 'N/A'}
+                    </td>
+                    <td>
+                      <a 
+                        href={`/round/${generateSlug(item.round)}`} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                      >
+                        {item.round || 'N/A'}
+                      </a>
+                    </td>
                     <td>{item.sector || 'N/A'}</td>
                     <td>{item.source || 'N/A'}</td>
                     <td>{item.valuation || 'N/A'}</td>
@@ -642,37 +689,42 @@ function App() {
           </div>
 
           <div className="col-md-6">
-    <div className="chart-container">
-      <h2>Top 120 Chains by Total Investment</h2>
-      <Bar
-        options={{
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            title: {
-              display: false,
-            },
-            legend: {
-              display: false,
-            },
-          },
-          scales: {
-            y: {
-              beginAtZero: true,
-              title: {
-                display: true,
-                text: 'Total Investment Amount',
-              },
-            },
-          },
-        }}
-        data={generateChainsInvestmentChartData()}
-      />
-    </div>
-  </div>
+            <div className="chart-container">
+              <h2>Top 120 Chains by Total Investment</h2>
+              <Bar
+                options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                    title: {
+                      display: false,
+                    },
+                    legend: {
+                      display: false,
+                    },
+                  },
+                  scales: {
+                    y: {
+                      beginAtZero: true,
+                      title: {
+                        display: true,
+                        text: 'Total Investment Amount',
+                      },
+                    },
+                  },
+                }}
+                data={generateChainsInvestmentChartData()}
+              />
+            </div>   
+          </div>
         </div>
       </div>
+      } />
+      <Route path="/round/:slug" element={<RoundPage />} />
+      <Route path="/investor/:slug" element={<InvestorPage />} />
+      </Routes>
     </div>
+    </Router>
   );
 }
 
