@@ -107,35 +107,42 @@ function App() {
 
   const [fundRaisingTimeFrame, setFundRaisingTimeFrame] = useState('monthly');
   const [roundsTimeFrame, setRoundsTimeFrame] = useState('monthly');
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'ascending' });
+  const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'descending' });
 
   useEffect(() => {
-    console.log('Fetching data from backend...');
-    fetch('http://127.0.0.1:5000/defillama')
-      .then(response => {
-        console.log('Response received:', response);
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const response = await fetch('https://api.llama.fi/raises');
         if (!response.ok) {
           throw new Error('Network response was not ok');
         }
-        return response.json();
-      })
-      .then(data => {
-        console.log('Data received:', data);
-        if (!data.raises || !Array.isArray(data.raises)) {
-          throw new Error('Invalid data format received');
-        }
-        setData(data);
+        const fetchedData = await response.json();
+        console.log('Fetched data:', JSON.stringify(fetchedData, null, 2));
+        setData(fetchedData);
         setLoading(false);
-        updateFilterOptions(data.raises);
-      })
-      .catch(error => {
+        updateFilterOptions(fetchedData);
+      } catch (error) {
         console.error('Error fetching data:', error);
         setError('Error fetching data: ' + error.message);
         setLoading(false);
-      });
+      }
+    };
+  
+    fetchData();
+  
+    // Set up an interval to fetch data every 5 minutes (300000 milliseconds)
+    const intervalId = setInterval(fetchData, 300000);
+  
+    // Clean up the interval on component unmount
+    return () => clearInterval(intervalId);
   }, []);
 
   const updateFilterOptions = (raises) => {
+    if (!Array.isArray(raises)) {
+      console.error('updateFilterOptions received non-array data');
+      return;
+    }
     const newOptions = {
       name: [...new Set(raises.map(item => item.name).filter(Boolean))],
       category: [...new Set(raises.map(item => item.category).filter(Boolean))],
@@ -417,21 +424,24 @@ function App() {
 
   const sortData = (key) => {
     let direction = 'ascending';
-    if (sortConfig.key === key && sortConfig.direction === 'ascending') {
-      direction = 'descending';
+    if (sortConfig.key === key) {
+      direction = sortConfig.direction === 'ascending' ? 'descending' : 'ascending';
+    } else if (key === 'date') {
+      direction = 'descending';  // Default to descending for dates
     }
     setSortConfig({ key, direction });
   };
 
   const getSortedData = (data) => {
-    if (!sortConfig.key) return data;
-
+    if (!data || !Array.isArray(data)) return [];
+    
     return [...data].sort((a, b) => {
       if (sortConfig.key === 'date') {
-        return sortConfig.direction === 'ascending' 
-          ? new Date(Number(a.date) * 1000) - new Date(Number(b.date) * 1000)
-          : new Date(Number(b.date) * 1000) - new Date(Number(a.date) * 1000);
+        const dateA = new Date(Number(a.date) * 1000);
+        const dateB = new Date(Number(b.date) * 1000);
+        return sortConfig.direction === 'ascending' ? dateA - dateB : dateB - dateA;
       }
+      
       if (a[sortConfig.key] < b[sortConfig.key]) {
         return sortConfig.direction === 'ascending' ? -1 : 1;
       }
@@ -484,7 +494,7 @@ function App() {
           />
         </div>
         <div className="table-responsive">
-          {filteredData.length > 0 ? (
+          {data.raises.length > 0 ? (
             <table className="table table-striped table-bordered table-hover table-sm">
               <thead className="thead-dark">
                 <tr>
@@ -493,7 +503,7 @@ function App() {
                   <th>Category</th>
                   <th>Chains</th>
                   <th onClick={() => sortData('date')} style={{cursor: 'pointer'}}>
-                    Date {sortConfig.key === 'date' && (sortConfig.direction === 'ascending' ? '▲' : '▼')}
+                    Date {sortConfig.key === 'date' ? (sortConfig.direction === 'ascending' ? '▲' : '▼') : '▼'}
                   </th>
                   <th>Lead Investors</th>
                   <th>Other Investors</th>
