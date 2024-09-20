@@ -138,6 +138,14 @@ function App() {
     return () => clearInterval(intervalId);
   }, []);
 
+  const sortDates = (dates) => {
+    return dates.sort((a, b) => {
+      const dateA = new Date(a);
+      const dateB = new Date(b);
+      return dateB - dateA;  // Changed from dateA - dateB to dateB - dateA
+    });
+  };
+
   const updateFilterOptions = (raises) => {
     if (!Array.isArray(raises)) {
       console.error('updateFilterOptions received non-array data');
@@ -200,7 +208,7 @@ function App() {
     const year = date.getFullYear();
     const month = date.getMonth();
     const quarter = Math.floor(month / 3) + 1;
-
+  
     switch (timeFrame) {
       case 'yearly':
         return `${year}`;
@@ -208,7 +216,7 @@ function App() {
         return `Q${quarter} ${year}`;
       case 'monthly':
       default:
-        return `${date.toLocaleString('default', { month: 'short' })} ${year}`;
+        return `${year}-${(month + 1).toString().padStart(2, '0')}`; // Format: YYYY-MM
     }
   };
 
@@ -234,20 +242,25 @@ function App() {
 
   const generateChartData = (timeFrame) => {
     const timeFrameData = {};
-
+  
     filteredData.forEach((item) => {
       const date = new Date(Number(item.date) * 1000);
       const key = getTimeFrameKey(date, timeFrame);
-
+  
       if (!timeFrameData[key]) {
         timeFrameData[key] = 0;
       }
-
+  
       timeFrameData[key] += parseFloat(item.amount);
     });
-
-    const sortedTimeFrames = sortTimeFrames(Object.keys(timeFrameData), timeFrame);
-
+  
+    let sortedTimeFrames;
+    if (timeFrame === 'monthly') {
+      sortedTimeFrames = sortDates(Object.keys(timeFrameData));
+    } else {
+      sortedTimeFrames = sortTimeFrames(Object.keys(timeFrameData), timeFrame).reverse();  // Added .reverse()
+    }
+  
     return {
       labels: sortedTimeFrames,
       datasets: [
@@ -263,36 +276,42 @@ function App() {
   const generateRoundsChartData = (timeFrame) => {
     const timeFrameRoundData = {};
     const roundCounts = {};
-
+  
     filteredData.forEach((item) => {
       const date = new Date(Number(item.date) * 1000);
       const key = getTimeFrameKey(date, timeFrame);
       const round = item.round || 'Unknown';
-
+  
       if (!timeFrameRoundData[key]) {
         timeFrameRoundData[key] = {};
       }
-
+  
       if (!timeFrameRoundData[key][round]) {
         timeFrameRoundData[key][round] = 0;
       }
-
+  
       timeFrameRoundData[key][round]++;
       roundCounts[round] = (roundCounts[round] || 0) + 1;
     });
-
-    const sortedTimeFrames = sortTimeFrames(Object.keys(timeFrameRoundData), timeFrame);
+  
+    let sortedTimeFrames;
+    if (timeFrame === 'monthly') {
+      sortedTimeFrames = sortDates(Object.keys(timeFrameRoundData));
+    } else {
+      sortedTimeFrames = sortTimeFrames(Object.keys(timeFrameRoundData), timeFrame).reverse();  // Added .reverse()
+    }
+  
     const top12Rounds = Object.entries(roundCounts)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 12)
       .map(([round]) => round);
-
+  
     const datasets = top12Rounds.map((round) => ({
       label: round,
       data: sortedTimeFrames.map((tf) => timeFrameRoundData[tf][round] || 0),
       backgroundColor: getRandomColor(),
     }));
-
+  
     return { labels: sortedTimeFrames, datasets };
   };
 
@@ -356,16 +375,18 @@ function App() {
     const categoryData = {};
   
     filteredData.forEach((item) => {
-      const category = item.category || 'Unknown';
+      const category = item.category;
       const amount = parseFloat(item.amount) || 0;
   
-      if (!categoryData[category]) {
-        categoryData[category] = 0;
+      if (category && category.toLowerCase() !== 'unknown' && category.toLowerCase() !== 'undefined') {
+        if (!categoryData[category]) {
+          categoryData[category] = 0;
+        }
+        categoryData[category] += amount;
       }
-      categoryData[category] += amount;
     });
   
-    // Sort categories by total investment amount and get top 120
+    // Sort categories by total investment amount and get top 15
     const sortedCategories = Object.entries(categoryData)
       .sort(([, a], [, b]) => b - a)
       .slice(0, 120);
@@ -389,20 +410,17 @@ function App() {
       const amount = parseFloat(item.amount) || 0;
       let chains = item.chains;
   
-      // Handle cases where chains might be undefined, empty, or a string
-      if (!chains || chains.length === 0) {
-        chains = ['Undefined'];
-      } else if (typeof chains === 'string') {
-        chains = [chains];
+      if (Array.isArray(chains) && chains.length > 0) {
+        chains.forEach((chain) => {
+          const chainName = chain.trim();
+          if (chainName && chainName.toLowerCase() !== 'unknown' && chainName.toLowerCase() !== 'undefined') {
+            if (!chainData[chainName]) {
+              chainData[chainName] = 0;
+            }
+            chainData[chainName] += amount / chains.length;
+          }
+        });
       }
-  
-      chains.forEach((chain) => {
-        const chainName = chain.trim() || 'Undefined';
-        if (!chainData[chainName]) {
-          chainData[chainName] = 0;
-        }
-        chainData[chainName] += amount / chains.length; // Distribute amount equally among chains
-      });
     });
   
     // Sort chains by total investment amount and get top 15
