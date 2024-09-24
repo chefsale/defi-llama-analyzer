@@ -1,9 +1,32 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { Pie } from 'react-chartjs-2';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
 
 ChartJS.register(ArcElement, Tooltip, Legend);
+
+const styles = {
+  tableWrapper: {
+    maxHeight: '500px',
+    overflowY: 'auto',
+    marginBottom: '20px'
+  },
+  table: {
+    width: '100%',
+    borderCollapse: 'collapse',
+  },
+  th: {
+    position: 'sticky',
+    top: 0,
+    backgroundColor: '#f2f2f2',
+    padding: '10px',
+    border: '1px solid #ddd'
+  },
+  td: {
+    padding: '10px',
+    border: '1px solid #ddd'
+  }
+};
 
 function InvestorPage() {
   const { slug } = useParams();
@@ -12,6 +35,7 @@ function InvestorPage() {
   const [coInvestorData, setCoInvestorData] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const tableRef = useRef(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -22,14 +46,11 @@ function InvestorPage() {
         }
         const data = await response.json();
         console.log('Fetched data:', data);
-        console.log('Data type:', typeof data);
-        console.log('Is array?', Array.isArray(data));
 
         let raisesData;
         if (Array.isArray(data)) {
           raisesData = data;
         } else if (typeof data === 'object' && data !== null) {
-          console.log('Data keys:', Object.keys(data));
           if (Array.isArray(data.raises)) {
             raisesData = data.raises;
           } else {
@@ -40,7 +61,6 @@ function InvestorPage() {
         }
 
         const investorName = slug.replace(/-/g, ' ').toLowerCase();
-        console.log('Looking for investor:', investorName);
 
         const filteredData = raisesData.filter(item => {
           const isLeadInvestor = item.leadInvestors && Array.isArray(item.leadInvestors) && 
@@ -49,8 +69,6 @@ function InvestorPage() {
                                   item.otherInvestors.some(investor => investor.toLowerCase() === investorName);
           return isLeadInvestor || isOtherInvestor;
         });
-
-        console.log('Filtered data:', filteredData);
 
         setInvestorData(filteredData);
         setRoundData(processRoundData(filteredData));
@@ -66,6 +84,20 @@ function InvestorPage() {
     fetchData();
   }, [slug]);
 
+  useEffect(() => {
+    if (tableRef.current) {
+      const tableHeight = tableRef.current.offsetHeight;
+      const maxHeight = 500;
+      if (tableHeight > maxHeight) {
+        tableRef.current.style.maxHeight = `${maxHeight}px`;
+        tableRef.current.style.overflowY = 'scroll';
+      } else {
+        tableRef.current.style.maxHeight = 'none';
+        tableRef.current.style.overflowY = 'visible';
+      }
+    }
+  }, [investorData]);
+
   const processRoundData = (data) => {
     const rounds = {};
     data.forEach(item => {
@@ -74,7 +106,6 @@ function InvestorPage() {
         rounds[item.round] += parseFloat(item.amount) || 0;
       }
     });
-    console.log('Processed round data:', rounds);
     return rounds;
   };
 
@@ -89,7 +120,6 @@ function InvestorPage() {
         }
       });
     });
-    console.log('Processed co-investor data:', coInvestors);
     return coInvestors;
   };
 
@@ -125,28 +155,32 @@ function InvestorPage() {
       
       <h2>Investments</h2>
       {investorData.length > 0 ? (
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
-          <thead>
-            <tr style={{ backgroundColor: '#f2f2f2' }}>
-              <th style={{ padding: '10px', border: '1px solid #ddd' }}>Project</th>
-              <th style={{ padding: '10px', border: '1px solid #ddd' }}>Amount</th>
-              <th style={{ padding: '10px', border: '1px solid #ddd' }}>Round</th>
-              <th style={{ padding: '10px', border: '1px solid #ddd' }}>Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            {investorData.map((item, index) => (
-              <tr key={index}>
-                <td style={{ padding: '10px', border: '1px solid #ddd' }}>{item.name}</td>
-                <td style={{ padding: '10px', border: '1px solid #ddd' }}>{item.amount}</td>
-                <td style={{ padding: '10px', border: '1px solid #ddd' }}>{item.round}</td>
-                <td style={{ padding: '10px', border: '1px solid #ddd' }}>
-                  {new Date(Number(item.date) * 1000).toLocaleDateString()}
-                </td>
+        <div ref={tableRef} style={styles.tableWrapper}>
+          <table style={styles.table}>
+            <thead>
+              <tr>
+                <th style={styles.th}>Project</th>
+                <th style={styles.th}>Amount</th>
+                <th style={styles.th}>Round</th>
+                <th style={styles.th}>Date</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {investorData.map((item, index) => (
+                <tr key={index}>
+                  <td style={styles.td}>{item.name}</td>
+                  <td style={styles.td}>
+                    {item.amount ? `${item.amount}M` : 'N/A'}
+                  </td>
+                  <td style={styles.td}>{item.round}</td>
+                  <td style={styles.td}>
+                    {new Date(Number(item.date) * 1000).toLocaleDateString()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       ) : (
         <p>No investment data available for this investor.</p>
       )}
