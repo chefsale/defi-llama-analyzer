@@ -170,7 +170,7 @@ function InvestorPage() {
                 <tr key={index}>
                   <td style={styles.td}>{item.name}</td>
                   <td style={styles.td}>
-                    {item.amount ? `${item.amount}M` : 'N/A'}
+                    {item.amount ? `${item.amount}M USD` : 'N/A'}
                   </td>
                   <td style={styles.td}>{item.round}</td>
                   <td style={styles.td}>

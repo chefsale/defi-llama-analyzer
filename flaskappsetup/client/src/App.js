@@ -535,7 +535,7 @@ function App() {
                 {getSortedData(filteredData).map((item, index) => (
                   <tr key={index}>
                     <td>{item.name || 'N/A'}</td>
-                    <td>{item.amount ? `${item.amount}M` : 'N/A'}</td>
+                    <td>{item.amount ? `${item.amount}M USD` : 'N/A'}</td>
                     <td>{item.category || 'N/A'}</td>
                     <td>{item.chains ? item.chains.join(', ') : 'N/A'}</td>
                     <td>{formatDate(item.date)}</td>
