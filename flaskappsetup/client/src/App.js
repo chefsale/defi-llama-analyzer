@@ -11,6 +11,9 @@ import {
   Legend,
 } from 'chart.js';
 import './App.css';
+import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import RoundPage from './RoundPage';
+import InvestorPage from './InvestorPage';
 
 ChartJS.register(
   CategoryScale,
@@ -102,33 +105,52 @@ function App() {
     sector: []
   });
 
+  const [fundRaisingTimeFrame, setFundRaisingTimeFrame] = useState('monthly');
+  const [roundsTimeFrame, setRoundsTimeFrame] = useState('monthly');
+  const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'descending' });
+
   useEffect(() => {
-    console.log('Fetching data from backend...');
-    fetch('http://127.0.0.1:5000/defillama')
-      .then(response => {
-        console.log('Response received:', response);
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const response = await fetch('https://api.llama.fi/raises');
         if (!response.ok) {
           throw new Error('Network response was not ok');
         }
-        return response.json();
-      })
-      .then(data => {
-        console.log('Data received:', data);
-        if (!data.raises || !Array.isArray(data.raises)) {
-          throw new Error('Invalid data format received');
-        }
-        setData(data);
+        const fetchedData = await response.json();
+        console.log('Fetched data:', JSON.stringify(fetchedData, null, 2));
+        setData(fetchedData);
         setLoading(false);
-        updateFilterOptions(data.raises);
-      })
-      .catch(error => {
+        updateFilterOptions(fetchedData);
+      } catch (error) {
         console.error('Error fetching data:', error);
         setError('Error fetching data: ' + error.message);
         setLoading(false);
-      });
+      }
+    };
+  
+    fetchData();
+  
+    // Set up an interval to fetch data every 5 minutes (300000 milliseconds)
+    const intervalId = setInterval(fetchData, 300000);
+  
+    // Clean up the interval on component unmount
+    return () => clearInterval(intervalId);
   }, []);
 
+  const sortDates = (dates) => {
+    return dates.sort((a, b) => {
+      const dateA = new Date(a);
+      const dateB = new Date(b);
+      return dateB - dateA;  // Changed from dateA - dateB to dateB - dateA
+    });
+  };
+
   const updateFilterOptions = (raises) => {
+    if (!Array.isArray(raises)) {
+      console.error('updateFilterOptions received non-array data');
+      return;
+    }
     const newOptions = {
       name: [...new Set(raises.map(item => item.name).filter(Boolean))],
       category: [...new Set(raises.map(item => item.category).filter(Boolean))],
@@ -182,78 +204,115 @@ function App() {
     });
   };
 
-  const sortMonths = (monthYearArray) => {
-    return monthYearArray.sort((a, b) => {
-      const [monthA, yearA] = a.split(' ');
-      const [monthB, yearB] = b.split(' ');
-      const dateA = new Date(`${monthA} 1, ${yearA}`);
-      const dateB = new Date(`${monthB} 1, ${yearB}`);
-      return dateB - dateA; // For descending order
+  const getTimeFrameKey = (date, timeFrame) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const quarter = Math.floor(month / 3) + 1;
+  
+    switch (timeFrame) {
+      case 'yearly':
+        return `${year}`;
+      case 'quarterly':
+        return `Q${quarter} ${year}`;
+      case 'monthly':
+      default:
+        return `${year}-${(month + 1).toString().padStart(2, '0')}`; // Format: YYYY-MM
+    }
+  };
+
+  const sortTimeFrames = (timeFrameArray, timeFrame) => {
+    return timeFrameArray.sort((a, b) => {
+      let dateA, dateB;
+      switch (timeFrame) {
+        case 'yearly':
+          return b.localeCompare(a);
+        case 'quarterly':
+          [, dateA] = a.split(' ');
+          [, dateB] = b.split(' ');
+          return dateB.localeCompare(dateA) || b.localeCompare(a);
+        case 'monthly':
+        default:
+          dateA = new Date(a);
+          dateB = new Date(b);
+          return dateB - dateA;
+      }
     });
   };
 
-  const generateChartData = () => {
-    const monthlyData = {};
 
+  const generateChartData = (timeFrame) => {
+    const timeFrameData = {};
+  
     filteredData.forEach((item) => {
       const date = new Date(Number(item.date) * 1000);
-      const monthYear = `${date.toLocaleString('default', { month: 'short' })} ${date.getFullYear()}`;
-
-      if (!monthlyData[monthYear]) {
-        monthlyData[monthYear] = 0;
+      const key = getTimeFrameKey(date, timeFrame);
+  
+      if (!timeFrameData[key]) {
+        timeFrameData[key] = 0;
       }
-
-      monthlyData[monthYear] += parseFloat(item.amount);
+  
+      timeFrameData[key] += parseFloat(item.amount);
     });
-
-    const sortedMonths = sortMonths(Object.keys(monthlyData));
-
+  
+    let sortedTimeFrames;
+    if (timeFrame === 'monthly') {
+      sortedTimeFrames = sortDates(Object.keys(timeFrameData));
+    } else {
+      sortedTimeFrames = sortTimeFrames(Object.keys(timeFrameData), timeFrame).reverse();  // Added .reverse()
+    }
+  
     return {
-      labels: sortedMonths,
+      labels: sortedTimeFrames,
       datasets: [
         {
           label: 'Amount Raised',
-          data: sortedMonths.map(month => monthlyData[month]),
+          data: sortedTimeFrames.map(tf => timeFrameData[tf]),
           backgroundColor: 'rgba(75, 192, 192, 0.6)',
         },
       ],
     };
   };
 
-  const generateRoundsChartData = () => {
-    const monthlyRoundData = {};
+  const generateRoundsChartData = (timeFrame) => {
+    const timeFrameRoundData = {};
     const roundCounts = {};
-
+  
     filteredData.forEach((item) => {
       const date = new Date(Number(item.date) * 1000);
-      const monthYear = `${date.toLocaleString('default', { month: 'short' })} ${date.getFullYear()}`;
+      const key = getTimeFrameKey(date, timeFrame);
       const round = item.round || 'Unknown';
-
-      if (!monthlyRoundData[monthYear]) {
-        monthlyRoundData[monthYear] = {};
+  
+      if (!timeFrameRoundData[key]) {
+        timeFrameRoundData[key] = {};
       }
-
-      if (!monthlyRoundData[monthYear][round]) {
-        monthlyRoundData[monthYear][round] = 0;
+  
+      if (!timeFrameRoundData[key][round]) {
+        timeFrameRoundData[key][round] = 0;
       }
-
-      monthlyRoundData[monthYear][round]++;
+  
+      timeFrameRoundData[key][round]++;
       roundCounts[round] = (roundCounts[round] || 0) + 1;
     });
-
-    const sortedMonths = sortMonths(Object.keys(monthlyRoundData));
+  
+    let sortedTimeFrames;
+    if (timeFrame === 'monthly') {
+      sortedTimeFrames = sortDates(Object.keys(timeFrameRoundData));
+    } else {
+      sortedTimeFrames = sortTimeFrames(Object.keys(timeFrameRoundData), timeFrame).reverse();  // Added .reverse()
+    }
+  
     const top12Rounds = Object.entries(roundCounts)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 12)
       .map(([round]) => round);
-
+  
     const datasets = top12Rounds.map((round) => ({
       label: round,
-      data: sortedMonths.map((month) => monthlyRoundData[month][round] || 0),
+      data: sortedTimeFrames.map((tf) => timeFrameRoundData[tf][round] || 0),
       backgroundColor: getRandomColor(),
     }));
-
-    return { labels: sortedMonths, datasets };
+  
+    return { labels: sortedTimeFrames, datasets };
   };
 
   const generateInvestorChartData = () => {
@@ -295,6 +354,15 @@ function App() {
     return `rgba(${r}, ${g}, ${b}, 0.6)`;
   };
 
+  const generateSlug = (name) => {
+    return (name || 'unknown')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)+/g, '');
+  };
+
+
+
   if (loading) {
     return <div className="container mt-5"><div className="alert alert-info">Loading...</div></div>;
   }
@@ -303,8 +371,110 @@ function App() {
     return <div className="container mt-5"><div className="alert alert-danger">{error}</div></div>;
   }
 
+  const generateCategoryInvestmentChartData = () => {
+    const categoryData = {};
+  
+    filteredData.forEach((item) => {
+      const category = item.category;
+      const amount = parseFloat(item.amount) || 0;
+  
+      if (category && category.toLowerCase() !== 'unknown' && category.toLowerCase() !== 'undefined') {
+        if (!categoryData[category]) {
+          categoryData[category] = 0;
+        }
+        categoryData[category] += amount;
+      }
+    });
+  
+    // Sort categories by total investment amount and get top 15
+    const sortedCategories = Object.entries(categoryData)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 120);
+  
+    return {
+      labels: sortedCategories.map(([category]) => category),
+      datasets: [
+        {
+          label: 'Total Investment',
+          data: sortedCategories.map(([, amount]) => amount),
+          backgroundColor: 'rgba(255, 159, 64, 0.6)',
+        },
+      ],
+    };
+  };
+
+  const generateChainsInvestmentChartData = () => {
+    const chainData = {};
+  
+    filteredData.forEach((item) => {
+      const amount = parseFloat(item.amount) || 0;
+      let chains = item.chains;
+  
+      if (Array.isArray(chains) && chains.length > 0) {
+        chains.forEach((chain) => {
+          const chainName = chain.trim();
+          if (chainName && chainName.toLowerCase() !== 'unknown' && chainName.toLowerCase() !== 'undefined') {
+            if (!chainData[chainName]) {
+              chainData[chainName] = 0;
+            }
+            chainData[chainName] += amount / chains.length;
+          }
+        });
+      }
+    });
+  
+    // Sort chains by total investment amount and get top 15
+    const sortedChains = Object.entries(chainData)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 120);
+  
+    return {
+      labels: sortedChains.map(([chain]) => chain),
+      datasets: [
+        {
+          label: 'Total Investment',
+          data: sortedChains.map(([, amount]) => amount),
+          backgroundColor: 'rgba(255, 206, 86, 0.6)',
+        },
+      ],
+    };
+  };
+
+  const sortData = (key) => {
+    let direction = 'ascending';
+    if (sortConfig.key === key) {
+      direction = sortConfig.direction === 'ascending' ? 'descending' : 'ascending';
+    } else if (key === 'date') {
+      direction = 'descending';  // Default to descending for dates
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const getSortedData = (data) => {
+    if (!data || !Array.isArray(data)) return [];
+    
+    return [...data].sort((a, b) => {
+      if (sortConfig.key === 'date') {
+        const dateA = new Date(Number(a.date) * 1000);
+        const dateB = new Date(Number(b.date) * 1000);
+        return sortConfig.direction === 'ascending' ? dateA - dateB : dateB - dateA;
+      }
+      
+      if (a[sortConfig.key] < b[sortConfig.key]) {
+        return sortConfig.direction === 'ascending' ? -1 : 1;
+      }
+      if (a[sortConfig.key] > b[sortConfig.key]) {
+        return sortConfig.direction === 'ascending' ? 1 : -1;
+      }
+      return 0;
+    });
+  };
+
   return (
+    <Router>
     <div className="App">
+      <Routes>
+      <Route path="/" element={
       <div className="container-fluid py-4">
         <h1 className="mb-4">Data from DefiLlama</h1>
         <div className="filters-container">
@@ -342,7 +512,7 @@ function App() {
           />
         </div>
         <div className="table-responsive">
-          {filteredData.length > 0 ? (
+          {data.raises.length > 0 ? (
             <table className="table table-striped table-bordered table-hover table-sm">
               <thead className="thead-dark">
                 <tr>
@@ -350,7 +520,9 @@ function App() {
                   <th>Amount</th>
                   <th>Category</th>
                   <th>Chains</th>
-                  <th>Date</th>
+                  <th onClick={() => sortData('date')} style={{cursor: 'pointer'}}>
+                    Date {sortConfig.key === 'date' ? (sortConfig.direction === 'ascending' ? '▲' : '▼') : '▼'}
+                  </th>
                   <th>Lead Investors</th>
                   <th>Other Investors</th>
                   <th>Round</th>
@@ -360,16 +532,50 @@ function App() {
                 </tr>
               </thead>
               <tbody>
-                {filteredData.map((item, index) => (
+                {getSortedData(filteredData).map((item, index) => (
                   <tr key={index}>
                     <td>{item.name || 'N/A'}</td>
-                    <td>{item.amount || 'N/A'}</td>
+                    <td>{item.amount ? `${item.amount}M USD` : 'N/A'}</td>
                     <td>{item.category || 'N/A'}</td>
                     <td>{item.chains ? item.chains.join(', ') : 'N/A'}</td>
                     <td>{formatDate(item.date)}</td>
-                    <td>{item.leadInvestors ? item.leadInvestors.join(', ') : 'N/A'}</td>
-                    <td>{item.otherInvestors ? item.otherInvestors.join(', ') : 'N/A'}</td>
-                    <td>{item.round || 'N/A'}</td>
+                    <td>
+                      {item.leadInvestors ? item.leadInvestors.map((investor, i) => (
+                        <React.Fragment key={i}>
+                          <a 
+                            href={`/investor/${generateSlug(investor)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            {investor}
+                          </a>
+                          {i < item.leadInvestors.length - 1 ? ', ' : ''}
+                        </React.Fragment>
+                      )) : 'N/A'}
+                    </td>
+                    <td>
+                      {item.otherInvestors ? item.otherInvestors.map((investor, i) => (
+                        <React.Fragment key={i}>
+                          <a 
+                            href={`/investor/${generateSlug(investor)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            {investor}
+                          </a>
+                          {i < item.otherInvestors.length - 1 ? ', ' : ''}
+                        </React.Fragment>
+                      )) : 'N/A'}
+                    </td>
+                    <td>
+                      <a 
+                        href={`/round/${generateSlug(item.round)}`} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                      >
+                        {item.round || 'N/A'}
+                      </a>
+                    </td>
                     <td>{item.sector || 'N/A'}</td>
                     <td>{item.source || 'N/A'}</td>
                     <td>{item.valuation || 'N/A'}</td>
@@ -384,21 +590,48 @@ function App() {
         <div className="row">
           <div className="col-md-6">
             <div className="chart-container">
-              <h2>Monthly Fundraising</h2>
-              <Bar options={{
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                  title: {
-                    display: false,
+              <div className="d-flex justify-content-between align-items-center mb-2">
+                <h2>Fundraising</h2>
+                <select 
+                  value={fundRaisingTimeFrame} 
+                  onChange={(e) => setFundRaisingTimeFrame(e.target.value)}
+                  className="form-select" 
+                  style={{width: 'auto'}}
+                >
+                  <option value="monthly">Monthly</option>
+                  <option value="quarterly">Quarterly</option>
+                  <option value="yearly">Yearly</option>
+                </select>
+              </div>
+              <Bar 
+                options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                    title: {
+                      display: false,
+                    },
                   },
-                },
-              }} data={generateChartData()} />
+                }} 
+                data={generateChartData(fundRaisingTimeFrame)} 
+              />
             </div>
           </div>
           <div className="col-md-6">
             <div className="chart-container">
-              <h2>Projects Raised by Round (Top 12)</h2>
+              <div className="d-flex justify-content-between align-items-center mb-2">
+                <h2>Projects Raised by Round (Top 12)</h2>
+                <select 
+                  value={roundsTimeFrame} 
+                  onChange={(e) => setRoundsTimeFrame(e.target.value)}
+                  className="form-select" 
+                  style={{width: 'auto'}}
+                >
+                  <option value="monthly">Monthly</option>
+                  <option value="quarterly">Quarterly</option>
+                  <option value="yearly">Yearly</option>
+                </select>
+              </div>
               <Bar
                 options={{
                   responsive: true,
@@ -420,7 +653,7 @@ function App() {
                     },
                   },
                 }}
-                data={generateRoundsChartData()}
+                data={generateRoundsChartData(roundsTimeFrame)}
               />
             </div>
           </div>
@@ -453,9 +686,73 @@ function App() {
               />
             </div>
           </div>
+          <div className="col-md-6">
+            <div className="chart-container">
+             <h2>Top 120 Categories by Total Investment</h2>
+             <Bar
+                options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                    title: {
+                     display: false,
+                    },
+                    legend: {
+                     display: false,
+                    },
+                  },
+                  scales: {
+                    y: {
+                     beginAtZero: true,
+                      title: {
+                        display: true,
+                        text: 'Total Investment Amount',
+                     },
+                   },
+                 },
+               }}
+               data={generateCategoryInvestmentChartData()}
+              />
+            </div>
+          </div>
+
+          <div className="col-md-6">
+            <div className="chart-container">
+              <h2>Top 120 Chains by Total Investment</h2>
+              <Bar
+                options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                    title: {
+                      display: false,
+                    },
+                    legend: {
+                      display: false,
+                    },
+                  },
+                  scales: {
+                    y: {
+                      beginAtZero: true,
+                      title: {
+                        display: true,
+                        text: 'Total Investment Amount',
+                      },
+                    },
+                  },
+                }}
+                data={generateChainsInvestmentChartData()}
+              />
+            </div>   
+          </div>
         </div>
       </div>
+      } />
+      <Route path="/round/:slug" element={<RoundPage />} />
+      <Route path="/investor/:slug" element={<InvestorPage />} />
+      </Routes>
     </div>
+    </Router>
   );
 }
 
